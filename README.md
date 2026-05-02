@@ -2,6 +2,8 @@
 
 A hyperlocal social discovery app for private flat gigs, terrace parties & BYOJ events in Pune.
 
+The app reads and writes through Next.js API routes backed by JSON files in `data/`, so hosted events persist locally instead of living only as imported mock arrays.
+
 ## Tech Stack
 
 - **Next.js 14** (App Router)
@@ -34,6 +36,9 @@ Open [http://localhost:3000](http://localhost:3000) on your phone browser or use
 | `/event/[id]` | Event detail + request entry |
 | `/host` | Create event form |
 | `/profile` | User profile + history |
+| `/api/events` | List and create events |
+| `/api/events/[id]` | Read one event |
+| `/api/users/me` | Read the current profile |
 
 ## Project Structure
 
@@ -46,15 +51,28 @@ pune-afterhours/
 │   ├── event/[id]/page.tsx  # Event detail
 │   ├── host/page.tsx        # Create event
 │   └── profile/page.tsx     # User profile
+├── data/
+│   ├── events.json          # Local event store
+│   └── user.json            # Local current user profile
 ├── components/
 │   ├── BottomNav.tsx        # Bottom navigation bar
 │   ├── EventCard.tsx        # Event list card
 │   └── MapView.tsx          # Interactive event map
 └── lib/
-    └── data.ts              # Types, mock data, helpers
+    ├── data.ts              # Types, seed data, helpers
+    └── store.ts             # Server-side JSON persistence
 ```
 
-## Next Steps to Make It Real
+## Data Layer
+
+- Discover loads live event records from `GET /api/events`.
+- Event detail loads a single record from `GET /api/events/:id`.
+- Host creates a persisted record with `POST /api/events`.
+- Profile reads from `GET /api/users/me`.
+
+This is suitable for local development and demos. For production deployment on Vercel or similar serverless hosts, replace `lib/store.ts` with a database-backed implementation because local filesystem writes are not durable there.
+
+## Production Next Steps
 
 ### Backend (Supabase recommended)
 1. Set up Supabase project at https://supabase.com

@@ -35,6 +35,8 @@ export interface EventPin {
   mapX: number;
   mapY: number;
   color: "accent" | "purple" | "warm" | "teal";
+  createdAt?: string;
+  source?: "seed" | "user";
 }
 
 export interface UserProfile {
@@ -59,7 +61,18 @@ export interface AttendedEvent {
   rating: number;
 }
 
-export const MOCK_EVENTS: EventPin[] = [
+export interface CreateEventInput {
+  name: string;
+  neighborhood: string;
+  time: string;
+  capacity: number;
+  entry: string;
+  vibe: VibeTag[];
+  access: AccessType;
+  description?: string;
+}
+
+const seedEvents = [
   {
     id: "1",
     name: "Rooftop Terrace Gig",
@@ -175,9 +188,15 @@ export const MOCK_EVENTS: EventPin[] = [
     mapY: 57,
     color: "accent",
   },
-];
+] satisfies Omit<EventPin, "createdAt" | "source">[];
 
-export const MOCK_USER: UserProfile = {
+export const SEED_EVENTS: EventPin[] = seedEvents.map((event) => ({
+  ...event,
+  createdAt: "2026-05-02T18:00:00.000+05:30",
+  source: "seed",
+}));
+
+export const SEED_USER: UserProfile = {
   id: "u1",
   name: "Priya Sharma",
   handle: "@priya.symbiosis",

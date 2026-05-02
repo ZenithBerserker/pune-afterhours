@@ -1,0 +1,18 @@
+{
+  "id": "u1",
+  "name": "Priya Sharma",
+  "handle": "@priya.symbiosis",
+  "initials": "PS",
+  "college": "Symbiosis Institute of Design",
+  "collegeVerified": true,
+  "kycVerified": true,
+  "eventsAttended": 14,
+  "rating": 4.9,
+  "eventsHosted": 2,
+  "attendedHistory": [
+    { "id": "h1", "name": "Terrace Jam - Viman Nagar", "emoji": "🎵", "date": "Last Saturday", "rating": 5 },
+    { "id": "h2", "name": "Poker Night - Wakad", "emoji": "🃏", "date": "2 weeks ago", "rating": 4 },
+    { "id": "h3", "name": "Horror Marathon - Kothrud", "emoji": "🎬", "date": "3 weeks ago", "rating": 5 },
+    { "id": "h4", "name": "Acoustic Jam - FC Road", "emoji": "🎤", "date": "Last month", "rating": 5 }
+  ]
+}

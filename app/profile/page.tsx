@@ -1,8 +1,8 @@
 "use client";
-import { MOCK_USER } from "@/lib/data";
+import { UserProfile } from "@/lib/data";
+import { useEffect, useState } from "react";
 import { Shield, Star, ChevronRight, GraduationCap, Fingerprint } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
-import Link from "next/link";
 
 function StarRow({ rating }: { rating: number }) {
   return (
@@ -20,7 +20,24 @@ function StarRow({ rating }: { rating: number }) {
 }
 
 export default function ProfilePage() {
-  const user = MOCK_USER;
+  const [user, setUser] = useState<UserProfile | null>(null);
+
+  useEffect(() => {
+    async function loadProfile() {
+      const response = await fetch("/api/users/me", { cache: "no-store" });
+      if (response.ok) setUser(await response.json());
+    }
+
+    loadProfile();
+  }, []);
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center h-dvh text-sm" style={{ background: "var(--bg)", color: "var(--muted)" }}>
+        Loading profile...
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-dvh" style={{ background: "var(--bg)" }}>

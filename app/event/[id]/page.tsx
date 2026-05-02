@@ -1,14 +1,53 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { MOCK_EVENTS, getPinColor, getStatusColor } from "@/lib/data";
+import { EventPin, getPinColor, getStatusColor } from "@/lib/data";
 import { ArrowLeft, Star, Shield, Lock, Users, Clock, MapPin } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
 export default function EventPage({ params }: { params: { id: string } }) {
   const router = useRouter();
-  const event = MOCK_EVENTS.find((e) => e.id === params.id) ?? MOCK_EVENTS[0];
+  const [event, setEvent] = useState<EventPin | null>(null);
+  const [loading, setLoading] = useState(true);
   const [requested, setRequested] = useState(false);
+
+  useEffect(() => {
+    async function loadEvent() {
+      try {
+        const response = await fetch(`/api/events/${params.id}`, { cache: "no-store" });
+        if (response.ok) {
+          setEvent(await response.json());
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadEvent();
+  }, [params.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-dvh text-sm" style={{ background: "var(--bg)", color: "var(--muted)" }}>
+        Loading event...
+      </div>
+    );
+  }
+
+  if (!event) {
+    return (
+      <div className="flex flex-col items-center justify-center h-dvh gap-3 text-center px-6" style={{ background: "var(--bg)" }}>
+        <p className="text-sm" style={{ color: "var(--muted)" }}>This event is no longer available.</p>
+        <button
+          onClick={() => router.push("/")}
+          className="px-4 py-2 rounded-xl text-sm font-bold"
+          style={{ background: "var(--accent)", color: "#0a0a0f" }}
+        >
+          Back to discover
+        </button>
+      </div>
+    );
+  }
 
   const pinColor = getPinColor(event.color);
   const statusColor = getStatusColor(event.status);

@@ -1,6 +1,6 @@
 "use client";
-import { useState } from "react";
-import { MOCK_EVENTS, VibeTag, VIBE_OPTIONS, EventPin } from "@/lib/data";
+import { useEffect, useMemo, useState } from "react";
+import { VibeTag, EventPin } from "@/lib/data";
 import MapView from "@/components/MapView";
 import EventCard from "@/components/EventCard";
 import BottomNav from "@/components/BottomNav";
@@ -10,11 +10,33 @@ const FILTERS: (VibeTag | "All")[] = ["All", "Terrace Gig", "Acoustic", "Techno"
 export default function DiscoverPage() {
   const [activeFilter, setActiveFilter] = useState<VibeTag | "All">("All");
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [events, setEvents] = useState<EventPin[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const filtered: EventPin[] =
-    activeFilter === "All"
-      ? MOCK_EVENTS
-      : MOCK_EVENTS.filter((e) => e.vibe.includes(activeFilter as VibeTag));
+  useEffect(() => {
+    async function loadEvents() {
+      try {
+        const response = await fetch("/api/events", { cache: "no-store" });
+        if (!response.ok) throw new Error("Could not load events.");
+        setEvents(await response.json());
+      } catch {
+        setError("Could not load tonight's events.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadEvents();
+  }, []);
+
+  const filtered: EventPin[] = useMemo(
+    () =>
+      activeFilter === "All"
+        ? events
+        : events.filter((e) => e.vibe.includes(activeFilter as VibeTag)),
+    [activeFilter, events]
+  );
 
   return (
     <div className="flex flex-col h-dvh" style={{ background: "var(--bg)" }}>
@@ -101,6 +123,21 @@ export default function DiscoverPage() {
           className="px-4 pb-2 overflow-x-auto no-scrollbar flex gap-2"
           style={{ background: "var(--surface)" }}
         >
+          {loading && (
+            <div className="text-xs py-2" style={{ color: "var(--muted)" }}>
+              Loading live events...
+            </div>
+          )}
+          {error && (
+            <div className="text-xs py-2" style={{ color: "var(--warm)" }}>
+              {error}
+            </div>
+          )}
+          {!loading && !error && filtered.length === 0 && (
+            <div className="text-xs py-2" style={{ color: "var(--muted)" }}>
+              No events match this filter.
+            </div>
+          )}
           {filtered.slice(0, 3).map((ev) => (
             <a
               key={ev.id}

@@ -21,6 +21,8 @@ export default function HostPage() {
   const [selectedVibes, setSelectedVibes] = useState<VibeTag[]>(["Acoustic"]);
   const [access, setAccess] = useState<AccessType>("public");
   const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   function toggleVibe(v: VibeTag) {
     setSelectedVibes((prev) =>
@@ -28,10 +30,38 @@ export default function HostPage() {
     );
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!name || !neighborhood) return;
-    setSubmitted(true);
-    setTimeout(() => router.push("/"), 1800);
+    setSaving(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          neighborhood,
+          time,
+          capacity: Number(capacity),
+          entry,
+          vibe: selectedVibes,
+          access,
+        }),
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error ?? "Could not create event.");
+      }
+
+      setSubmitted(true);
+      setTimeout(() => router.push("/"), 1200);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create event.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (submitted) {
@@ -45,7 +75,7 @@ export default function HostPage() {
           Event created!
         </h2>
         <p className="text-sm" style={{ color: "var(--muted)" }}>
-          Your event is live on the map. Sharing flyer generated.
+          Your event was saved and is live on the map.
         </p>
         <p className="text-xs mt-4" style={{ color: "var(--hint)" }}>
           Redirecting to discover…
@@ -209,6 +239,16 @@ export default function HostPage() {
           </div>
         </div>
 
+        {/* Save error */}
+        {error && (
+          <div
+            className="p-3 rounded-xl text-xs"
+            style={{ background: "rgba(255,107,74,0.08)", border: "0.5px solid rgba(255,107,74,0.24)", color: "var(--warm)" }}
+          >
+            {error}
+          </div>
+        )}
+
         {/* Noise reminder */}
         <div
           className="flex items-start gap-3 p-3 rounded-xl"
@@ -230,17 +270,17 @@ export default function HostPage() {
       >
         <button
           onClick={handleSubmit}
-          disabled={!name || !neighborhood}
+          disabled={!name || !neighborhood || saving}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all"
           style={{
             fontFamily: "var(--font-head)",
-            background: name && neighborhood ? "var(--accent2)" : "var(--surface2)",
-            color: name && neighborhood ? "#fff" : "var(--hint)",
-            border: name && neighborhood ? "none" : "0.5px solid var(--border2)",
-            cursor: name && neighborhood ? "pointer" : "not-allowed",
+            background: name && neighborhood && !saving ? "var(--accent2)" : "var(--surface2)",
+            color: name && neighborhood && !saving ? "#fff" : "var(--hint)",
+            border: name && neighborhood && !saving ? "none" : "0.5px solid var(--border2)",
+            cursor: name && neighborhood && !saving ? "pointer" : "not-allowed",
           }}
         >
-          Create event & generate flyer
+          {saving ? "Creating event..." : "Create event"}
         </button>
       </div>
 
