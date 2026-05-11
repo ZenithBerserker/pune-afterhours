@@ -1,0 +1,10 @@
+-- OPTIONAL: run only if you previously created `profiles.id` as text with seed row `u1`.
+-- Steps: (1) drop dependent policies if any (2) run below (3) Users must sign up again for profiles.
+--
+-- DROP TABLE IF EXISTS public.event_requests CASCADE;
+-- DROP TABLE IF EXISTS public.events CASCADE;
+-- DROP TABLE IF EXISTS public.profiles CASCADE;
+-- DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+-- DROP FUNCTION IF EXISTS public.handle_new_user();
+--
+-- Then re-run the latest supabase/schema.sql from the repo (or paste CREATE sections only).

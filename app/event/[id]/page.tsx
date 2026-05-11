@@ -5,26 +5,189 @@ import { EventPin, getPinColor, getStatusColor } from "@/lib/data";
 import { ArrowLeft, Star, Shield, Lock, Users, Clock, MapPin } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
+type EntryMeta =
+  | { mode: "file" }
+  | { mode: "cloud"; loggedIn: boolean; status: "pending" | "approved" | "rejected" | null };
+
+type ChatMessage = {
+  id: string;
+  eventId: string;
+  userId: string;
+  userName: string;
+  userInitials: string;
+  message: string;
+  createdAt: string;
+};
+
+type HostRequest = {
+  id: string;
+  eventId: string;
+  userId: string;
+  status: "pending" | "approved" | "rejected";
+  createdAt: string;
+  userName: string;
+  userHandle: string;
+  userInitials: string;
+};
+
 export default function EventPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const [event, setEvent] = useState<EventPin | null>(null);
   const [loading, setLoading] = useState(true);
   const [requested, setRequested] = useState(false);
+  const [meta, setMeta] = useState<EntryMeta | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
+  const [hostRequests, setHostRequests] = useState<HostRequest[]>([]);
+  const [isHost, setIsHost] = useState(false);
+  const [hostLoading, setHostLoading] = useState(false);
 
   useEffect(() => {
-    async function loadEvent() {
+    async function load() {
+      setLoading(true);
       try {
-        const response = await fetch(`/api/events/${params.id}`, { cache: "no-store" });
-        if (response.ok) {
-          setEvent(await response.json());
+        const [eventRes, entryRes] = await Promise.all([
+          fetch(`/api/events/${params.id}`, { cache: "no-store" }),
+          fetch(`/api/events/${params.id}/request`, { cache: "no-store" }),
+        ]);
+
+        if (eventRes.ok) {
+          setEvent(await eventRes.json());
+        } else {
+          setEvent(null);
+        }
+
+        if (entryRes.ok) {
+          const body = await entryRes.json();
+          if (body.mode === "file") {
+            setMeta({ mode: "file" });
+          } else if (body.mode === "cloud") {
+            const m: EntryMeta = {
+              mode: "cloud",
+              loggedIn: Boolean(body.loggedIn),
+              status: body.status ?? null,
+            };
+            setMeta(m);
+            if (m.status === "pending" || m.status === "approved") {
+              setRequested(true);
+            }
+          }
+        } else {
+          setMeta({ mode: "file" });
         }
       } finally {
         setLoading(false);
       }
     }
 
-    loadEvent();
+    load();
   }, [params.id]);
+
+  async function handleRequestEntry() {
+    if (!event || event.status === "full" || submitting) return;
+
+    if (meta?.mode === "cloud" && !meta.loggedIn) {
+      router.push(`/login?next=/event/${params.id}`);
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/events/${params.id}/request`, { method: "POST" });
+      if (res.status === 401) {
+        router.push(`/login?next=/event/${params.id}`);
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        console.warn(err?.error ?? "Could not submit request");
+      }
+      setRequested(true);
+      if (meta?.mode === "cloud") {
+        setMeta({ ...meta, loggedIn: true, status: "pending" });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function loadChatMessages() {
+    if (!event) return;
+    setChatLoading(true);
+    try {
+      const res = await fetch(`/api/events/${params.id}/chat`, { cache: "no-store" });
+      if (!res.ok) return;
+      const body = await res.json();
+      setChatMessages(Array.isArray(body.messages) ? body.messages : []);
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
+  async function handleSendChat() {
+    if (!chatInput.trim()) return;
+    setChatError("");
+    const res = await fetch(`/api/events/${params.id}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: chatInput.trim() }),
+    });
+    if (res.status === 401) {
+      router.push(`/login?next=/event/${params.id}`);
+      return;
+    }
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setChatError(body.error ?? "Could not send message.");
+      return;
+    }
+    const message = (await res.json()) as ChatMessage;
+    setChatMessages((prev) => [...prev, message]);
+    setChatInput("");
+  }
+
+  async function loadHostRequests() {
+    setHostLoading(true);
+    try {
+      const res = await fetch(`/api/events/${params.id}/request/manage`, { cache: "no-store" });
+      if (res.status === 403 || res.status === 401) {
+        setIsHost(false);
+        return;
+      }
+      if (!res.ok) return;
+      const body = await res.json();
+      setIsHost(true);
+      setHostRequests(Array.isArray(body.requests) ? body.requests : []);
+    } finally {
+      setHostLoading(false);
+    }
+  }
+
+  async function updateRequest(userId: string, status: "approved" | "rejected") {
+    const res = await fetch(`/api/events/${params.id}/request/manage`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId, status }),
+    });
+    if (!res.ok) return;
+    setHostRequests((prev) =>
+      prev.map((item) => (item.userId === userId ? { ...item, status } : item))
+    );
+  }
+
+  useEffect(() => {
+    if (!event) return;
+    loadChatMessages();
+    loadHostRequests();
+    const timer = setInterval(() => {
+      loadChatMessages();
+      if (isHost) loadHostRequests();
+    }, 8000);
+    return () => clearInterval(timer);
+  }, [event, params.id, isHost]);
 
   if (loading) {
     return (
@@ -215,6 +378,156 @@ export default function EventPage({ params }: { params: { id: string } }) {
           {event.description}
         </p>
 
+        {/* Event chat */}
+        <div
+          className="rounded-xl p-3 mb-4"
+          style={{ background: "var(--surface2)", border: "0.5px solid var(--border)" }}
+        >
+          <p
+            className="text-[10px] uppercase tracking-widest mb-2"
+            style={{ color: "var(--hint)", fontFamily: "var(--font-head)" }}
+          >
+            Event chat
+          </p>
+
+          <div
+            className="space-y-2 mb-3 pr-1 overflow-y-auto no-scrollbar"
+            style={{ maxHeight: 180 }}
+          >
+            {chatLoading && chatMessages.length === 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Loading chat...
+              </p>
+            )}
+            {!chatLoading && chatMessages.length === 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                No messages yet. Start the conversation.
+              </p>
+            )}
+            {chatMessages.map((msg) => (
+              <div
+                key={msg.id}
+                className="p-2 rounded-lg"
+                style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid var(--border2)" }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span
+                    className="w-5 h-5 rounded-full text-[9px] font-semibold flex items-center justify-center"
+                    style={{ background: "var(--accent2)", color: "#fff" }}
+                  >
+                    {msg.userInitials}
+                  </span>
+                  <span className="text-[11px]" style={{ color: "var(--text)" }}>
+                    {msg.userName}
+                  </span>
+                </div>
+                <p className="text-xs leading-relaxed" style={{ color: "var(--muted)" }}>
+                  {msg.message}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          {chatError && (
+            <p className="text-[11px] mb-2" style={{ color: "var(--warm)" }}>
+              {chatError}
+            </p>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              className="form-input !py-2 !text-xs"
+              placeholder="Send a message..."
+              maxLength={300}
+              disabled={meta?.mode === "cloud" && !meta.loggedIn}
+            />
+            <button
+              type="button"
+              onClick={handleSendChat}
+              className="px-3 rounded-lg text-xs font-bold"
+              style={{
+                background: "var(--accent2)",
+                color: "#fff",
+                opacity: chatInput.trim() ? 1 : 0.6,
+              }}
+              disabled={!chatInput.trim()}
+            >
+              Send
+            </button>
+          </div>
+        </div>
+
+        {/* Host request management */}
+        {isHost && (
+          <div
+            className="rounded-xl p-3 mb-4"
+            style={{ background: "var(--surface2)", border: "0.5px solid var(--border)" }}
+          >
+            <p
+              className="text-[10px] uppercase tracking-widest mb-2"
+              style={{ color: "var(--hint)", fontFamily: "var(--font-head)" }}
+            >
+              Entry requests
+            </p>
+            {hostLoading && hostRequests.length === 0 && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                Loading requests...
+              </p>
+            )}
+            {hostRequests.length === 0 && !hostLoading && (
+              <p className="text-xs" style={{ color: "var(--muted)" }}>
+                No requests yet.
+              </p>
+            )}
+            <div className="space-y-2">
+              {hostRequests.map((req) => (
+                <div
+                  key={req.id}
+                  className="p-2 rounded-lg"
+                  style={{ background: "rgba(255,255,255,0.03)", border: "0.5px solid var(--border2)" }}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs" style={{ color: "var(--text)" }}>
+                        {req.userName}
+                      </p>
+                      <p className="text-[10px]" style={{ color: "var(--hint)" }}>
+                        {req.userHandle}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => updateRequest(req.userId, "approved")}
+                        className="px-2 py-1 rounded text-[10px] font-semibold"
+                        style={{
+                          background: req.status === "approved" ? "var(--accent)" : "var(--surface)",
+                          color: req.status === "approved" ? "#0a0a0f" : "var(--muted)",
+                        }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateRequest(req.userId, "rejected")}
+                        className="px-2 py-1 rounded text-[10px] font-semibold"
+                        style={{
+                          background: req.status === "rejected" ? "var(--warm)" : "var(--surface)",
+                          color: req.status === "rejected" ? "#fff" : "var(--muted)",
+                        }}
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Host rating */}
         <div
           className="flex items-center justify-between p-3 rounded-xl"
@@ -251,8 +564,9 @@ export default function EventPage({ params }: { params: { id: string } }) {
         style={{ background: "var(--bg)", borderTop: "0.5px solid var(--border)" }}
       >
         <button
-          onClick={() => setRequested(true)}
-          disabled={event.status === "full" || requested}
+          type="button"
+          onClick={() => handleRequestEntry()}
+          disabled={event.status === "full" || requested || submitting}
           className="w-full py-3.5 rounded-xl text-sm font-bold transition-all"
           style={{
             fontFamily: "var(--font-head)",
@@ -260,16 +574,29 @@ export default function EventPage({ params }: { params: { id: string } }) {
               ? "var(--surface2)"
               : event.status === "full"
               ? "var(--surface2)"
+              : meta?.mode === "cloud" && !meta.loggedIn
+              ? "var(--accent2)"
               : "var(--accent)",
-            color: requested || event.status === "full" ? "var(--muted)" : "#0a0a0f",
+            color:
+              requested || event.status === "full"
+                ? "var(--muted)"
+                : meta?.mode === "cloud" && !meta.loggedIn
+                  ? "#fff"
+                  : "#0a0a0f",
             border: requested || event.status === "full" ? "0.5px solid var(--border2)" : "none",
             cursor: event.status === "full" ? "not-allowed" : "pointer",
           }}
         >
           {requested
-            ? "✓ Request sent — awaiting host approval"
+            ? meta?.mode === "file"
+              ? "✓ Saved locally (demo mode)"
+              : "✓ Request sent — awaiting host approval"
             : event.status === "full"
             ? "Event is full"
+            : meta?.mode === "cloud" && !meta.loggedIn
+            ? "Sign in to request entry"
+            : submitting
+            ? "Sending…"
             : "Request Entry →"}
         </button>
       </div>
